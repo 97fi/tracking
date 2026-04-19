@@ -205,7 +205,9 @@ function getEffectiveEntry(d,idx){
   }
   return {entry:null,auto:false};
 }
-function isSleepIdx(idx){return isAutoSleepForDay(currentDay,idx)&&!hasManualEntry(idx);}
+function isSleepIdx(idx){
+  return isAutoSleepForDay(currentDay,idx);
+}
 
 function setMode(m){
   mode=m;rangeStart=null;
@@ -264,18 +266,60 @@ function buildInlinePicker(forIdx, fromIdx, onSelect, onNoteMode){
   return panel;
 }
 
-function buildNoteEditPanel(key, currentNote, onSave){
+function getRecentNotes(catId, limit=10){
+  const allNotes = [];
+  const days = Object.keys(entries).sort().reverse();
+  for(const dk of days){
+    const dayE = entries[dk];
+    const slots = Object.keys(dayE).sort().reverse();
+    for(const sk of slots){
+      const e = dayE[sk];
+      if(e && e.cat===catId && e.note && e.note.trim()){
+        allNotes.push(e.note.trim());
+      }
+    }
+  }
+  // keep order of first occurrence (newest first), deduplicate
+  const seen = new Set();
+  const result = [];
+  for(const n of allNotes){
+    if(!seen.has(n)){seen.add(n);result.push(n);}
+    if(result.length>=limit) break;
+  }
+  return result;
+}
+
+function buildNoteEditPanel(key, currentNote, onSave, catId){
   const panel = document.createElement('div');
   panel.className = 'picker-panel';
   panel.style.margin = '4px 0 4px 92px';
   const title = document.createElement('div');
   title.className = 'picker-title'; title.textContent = 'Notiz: '+key;
   panel.appendChild(title);
-  const noteRow = document.createElement('div'); noteRow.className = 'note-row';
+
   const inp = document.createElement('input');
   inp.className = 'note-input'; inp.type = 'text';
   inp.value = currentNote || ''; inp.placeholder = 'Notiz eingeben...';
   setTimeout(()=>inp.focus(), 50);
+
+  // recent notes suggestions
+  if(catId){
+    const recent = getRecentNotes(catId);
+    if(recent.length){
+      const suggestRow = document.createElement('div');
+      suggestRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px';
+      recent.forEach(n=>{
+        const chip = document.createElement('button');
+        chip.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid #ddd;background:#fff;cursor:pointer;color:#444';
+        chip.textContent = n;
+        chip.onclick = ()=>{ inp.value = n; onSave(n); };
+        suggestRow.appendChild(chip);
+      });
+      panel.appendChild(suggestRow);
+    }
+  }
+
+  const noteRow = document.createElement('div'); noteRow.className = 'note-row';
   const btn = document.createElement('button');
   btn.className = 'note-save-btn'; btn.textContent = 'OK';
   btn.onclick = () => onSave(inp.value.trim());
@@ -538,7 +582,7 @@ function maybeInjectPicker(container, i){
       const k=dateKey(currentDay);if(!entries[k])entries[k]={};
       if(entries[k][key])entries[k][key].note=note;
       inlinePickerSlotIdx=null;saveLocal();renderDay();
-    });
+    }, entry?entry.cat:null);
     container.appendChild(notePanel);
   }
 }
@@ -571,6 +615,9 @@ function buildSlotEl(i){
     if(!isCont){
       const lbl=document.createElement('span');lbl.className='slot-label';lbl.style.color=tc;lbl.textContent=cat.name;block.appendChild(lbl);
       if(entry.note){const note=document.createElement('span');note.className='slot-note';note.style.color=tc;note.textContent=entry.note;block.appendChild(note);}
+    } else if(entry.note){
+      const lbl=document.createElement('span');lbl.className='slot-label';lbl.style.color=tc;lbl.textContent=' ';block.appendChild(lbl);
+      const note=document.createElement('span');note.className='slot-note';note.style.color=tc;note.textContent=entry.note;block.appendChild(note);
     }
   } else {
     const lbl=document.createElement('span');lbl.className='slot-label';lbl.textContent='';block.appendChild(lbl);
